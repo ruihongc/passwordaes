@@ -4,34 +4,30 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+def genf(salt, pw):
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=1000003,
+    )
+    key = kdf.derive(pw)
+    return AESGCM(key)
+
+def _encrypt(nonce, data, salt, pw):
+    f = genf(salt, pw)
+    e = nonce + f.encrypt(nonce, data, b'') + salt
+    assert f.decrypt(e[:12], e[12:-32], b'') == data # sanity check
+    return e
+
 def encrypt(data, pw):
     salt = os.urandom(32)
     nonce = os.urandom(12)
     return _encrypt(nonce, data, salt, pw)
 
-def _encrypt(nonce, data, salt, pw):
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=1000007,
-    )
-    key = kdf.derive(pw)
-    f = AESGCM(key)
-    e = nonce + f.encrypt(nonce, data, b'') + salt
-    assert f.decrypt(e[:12], e[12:-32], b'') == data # sanity check
-    return e
-
 def decrypt(data, pw):
     salt = data[-32:]
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=1000007,
-    )
-    key = kdf.derive(pw)
-    f = AESGCM(key)
+    f = genf(salt, pw)
     d = f.decrypt(data[:12], data[12:-32], b'')
     assert (data[:12] + f.encrypt(data[:12], d, b'') + salt) == data # sanity check
     return d
